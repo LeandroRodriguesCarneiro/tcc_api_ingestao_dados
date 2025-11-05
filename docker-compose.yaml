@@ -1,0 +1,109 @@
+version: "3.8"
+
+services:
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: chromadb
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./chroma_data:/chroma/chroma
+    env_file:
+      - .env.chroma
+    networks:
+      - test_net
+
+  api_autenticacao:
+    image: tcc_api_autenticacao:latest
+    container_name: api_autenticacao
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env.auth
+    environment:
+      DB_HOST: postgres_tcc
+      DB_PORT: 5432
+      DB_USER: test_user
+      DB_PSW: test_pass
+      DB_DATABASE: test_db
+    volumes:
+      - .:/app
+      - shared_tmp:/app/tmp
+    depends_on:
+      postgres_tcc:
+        condition: service_healthy
+    networks:
+      - test_net
+
+  api_ingestao_dados:
+    image: .
+    container_name: api_ingestao_dados
+
+  postgres_tcc:
+    image: postgres:16
+    container_name: postgres_tcc
+    environment:
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_pass
+      POSTGRES_DB: test_db
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d test_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: on-failure
+    networks:
+      - test_net
+  
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper
+    networks:
+      - test_net
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      KAFKA_MESSAGE_MAX_BYTES: 10485760       
+      KAFKA_REPLICA_FETCH_MAX_BYTES: 10485760 
+      KAFKA_MAX_REQUEST_SIZE: 10485760        
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    depends_on:
+      - zookeeper
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server kafka:9092 --list || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    networks:
+      - test_net
+
+volumes:
+  shared_tmp:
+  zookeeper_data:
+  kafka_data:
+  chroma_data:
+
+networks:
+  test_net:

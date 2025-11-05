@@ -1,0 +1,52 @@
+# Diretórios comuns a ignorar
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+*.egg/
+dist/
+build/
+.eggs/
+.cache/
+.mypy_cache/
+.pytest_cache/
+.coverage
+.tox/
+
+# Diretórios de ambiente virtual
+venv/
+env/
+.venv/
+.env/
+
+# Arquivos do sistema e editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Git
+.git
+.gitignore
+
+# Docker
+.dockerignore
+Dockerfile
+
+__pycache__/
+.github/
+.pytest_cache/
+
+# Ignorar cache do pytest
+.pytest_cache/
+**/.pytest_cache/**
+
+# Ignorar todos os caches do Python em qualquer subpasta
+__pycache__/
+**/__pycache__/
+**/__pycache__/**
+
+*.log
