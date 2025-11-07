@@ -14,7 +14,7 @@ services:
       - test_net
 
   api_autenticacao:
-    image: tcc_api_autenticacao:latest
+    image: leandrorodriguescarneiro/tcc_api_autenticacao:latest
     container_name: api_autenticacao
     ports:
       - "8000:8000"
@@ -38,6 +38,33 @@ services:
   api_ingestao_dados:
     image: .
     container_name: api_ingestao_dados
+    environment:
+      DB_HOST: postgres_tcc
+      DB_PORT: 5432
+      DB_USER: test_user
+      DB_PSW: test_pass
+      DB_DATABASE: test_db
+    volumes:
+      - .:/app
+      - shared_tmp:/app/tmp
+    depends_on:
+      postgres_tcc:
+        condition: service_healthy
+      api_autenticacao:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  topic-init:
+    build: .
+    container_name: topic-init
+    command: ["python", "-m", "app.kafka.init_topics"]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    restart: "no"
 
   postgres_tcc:
     image: postgres:16
