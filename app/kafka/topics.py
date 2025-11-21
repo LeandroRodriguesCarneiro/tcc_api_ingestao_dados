@@ -1,6 +1,7 @@
 import time
 from confluent_kafka.admin import AdminClient, NewTopic
-from app.core import Config, logger
+from app.settings import Settings
+from app.loggin import logger
 
 def ensure_topics(max_retries: int = 5, retry_delay: int = 5):
     """
@@ -9,12 +10,12 @@ def ensure_topics(max_retries: int = 5, retry_delay: int = 5):
     """
     for attempt in range(1, max_retries + 1):
         try:
-            admin = AdminClient({"bootstrap.servers": Config.KAFKA_BOOTSTRAP_SERVERS})
+            admin = AdminClient({"bootstrap.servers": Settings.KAFKA_BOOTSTRAP_SERVERS})
             cluster_metadata = admin.list_topics(timeout=10)
             existing_topics = set(cluster_metadata.topics.keys())
 
             new_topics = []
-            for topic_name, conf in Config.TOPICS.items():
+            for topic_name, conf in Settings.TOPICS.items():
                 if topic_name in existing_topics:
                     continue
 

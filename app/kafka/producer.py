@@ -1,7 +1,9 @@
 import json
 from pathlib import Path
 from confluent_kafka import Producer
+
 from ..settings import Settings
+from ..loggin import logger
 
 class KafkaProducer:
     """Classe responsável por enviar mensagens JSON para o Kafka."""

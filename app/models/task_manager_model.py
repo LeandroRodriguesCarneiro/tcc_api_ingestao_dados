@@ -1,9 +1,8 @@
 from sqlalchemy import Column, DateTime, Text, func
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import declarative_base
 import uuid
 
-Base = declarative_base()
+from .base_model import Base
 
 class TaskManagerModel(Base):
     __tablename__ = "task_manager"

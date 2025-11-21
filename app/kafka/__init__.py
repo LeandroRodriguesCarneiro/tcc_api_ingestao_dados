@@ -1,4 +1,4 @@
-from producer import KafkaProducer
+from .producer import KafkaProducer
 
 __all__ = [
     'KafkaProducer'

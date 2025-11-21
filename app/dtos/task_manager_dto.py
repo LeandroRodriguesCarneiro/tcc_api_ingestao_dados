@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
@@ -5,7 +7,7 @@ from datetime import datetime
 from ..models import TaskManagerModel
 
 class TaskManagerDTO(BaseModel):
-    id: Optional[str] = None
+    id: Optional[UUID] = None
     document_name: str
     document_path: str
     document_status: str

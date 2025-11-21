@@ -1,10 +1,10 @@
 import requests
 from ..settings import Settings
 
-class Security:
-    def __init__(self, email: str = None, senha: str = None):
+class SecurityService:
+    def __init__(self):
 
-        self.auth_url = Settings.URL_API_AUTH.rstrip("/") + "/auth/me"
+        self.auth_url = Settings.URL_API_AUTH.rstrip("/") + "/api/v1/User/me"
 
     def validate_access_token(self, token: str):
 

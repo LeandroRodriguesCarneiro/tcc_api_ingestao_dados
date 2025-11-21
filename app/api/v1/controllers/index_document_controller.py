@@ -1,13 +1,15 @@
+from typing import Generator
 import filetype
 from fastapi import APIRouter, Body, HTTPException, UploadFile, File, Depends
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
-from ..settings import Settings
-from ..security import Security
-from ..services import IndexDocumentService
-from ..database import Database
+from ....settings import Settings
+from ....services import IndexDocumentService, SecurityService
+from ....database import Database
 
+database = Database.get_instance()
 
 class IndexDocumentController:
     def __init__(self):
@@ -35,7 +37,7 @@ class IndexDocumentController:
         if not access_token:
             raise HTTPException(status_code=401, detail="Usuário não autenticado")
 
-        security = Security()
+        security = SecurityService()
         try:
             security.validate_access_token(access_token)
         except Exception:
@@ -52,7 +54,7 @@ class IndexDocumentController:
             )
 
         service = IndexDocumentService(db)
-        result = await service.save_file(file)
+        result = service.save_file(file, tipo.mime)
 
         return JSONResponse(content={
             "status": "Processamento do documento iniciado",
@@ -69,13 +71,13 @@ class IndexDocumentController:
         if not access_token:
             raise HTTPException(status_code=401, detail="Usuário não autenticado")
 
-        security = Security()
+        security = SecurityService()
         try:
             security.validate_access_token(access_token)
         except Exception:
             raise HTTPException(status_code=401, detail="Token inválido ou expirado")
 
         service = IndexDocumentService(db)
-        result = await service.consult_file(id)
+        result = service.consult_file(id)
 
-        return JSONResponse(content=result)
+        return JSONResponse(content=jsonable_encoder(result))
