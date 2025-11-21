@@ -119,8 +119,8 @@ class PDFSplitterWorker(KafkaWorker):
                 await asyncio.to_thread(self.producer.send, self.output_topic, data)
                 logger.info(f"📦 Splitter enviado: páginas {start+1}-{end} -> {splitter_filename}")
 
-            self._update_task_status(task, "Parsed")
-            logger.info(f"🟢 Documento {document_id} atualizado para Parsed")
+            self._update_task_status(task, "Extracting")
+            logger.info(f"🟢 Documento {document_id} atualizado para Extracting")
 
             return [str(p.resolve()) for p in generated_paths]
 
