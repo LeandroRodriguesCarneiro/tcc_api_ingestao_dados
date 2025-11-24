@@ -30,7 +30,6 @@ class DocxToPdfSplitterWorker(KafkaWorker):
         self.storage_base = Path(storage_base)
         self.storage_base.mkdir(parents=True, exist_ok=True)
 
-        self.task_manager_repo = TaskManagerRepository(next(Database.get_db()))
         self.producer = KafkaProducer()
         self.output_topic = output_topic
         self.splitter_page_size = splitter_page_size
@@ -44,7 +43,7 @@ class DocxToPdfSplitterWorker(KafkaWorker):
             return
 
         document_name = data.get("document_name", Path(document_path).stem)
-        repo = TaskManagerRepository(session) if session else self.task_manager_repo
+        repo = TaskManagerRepository(session)
         task = repo.get_by_id(document_id)
 
         if not task:
@@ -85,7 +84,6 @@ class DocxToPdfSplitterWorker(KafkaWorker):
             logger.warning(f"Arquivo DOCX já não existe: {docx_to_delete}")
         except Exception as e:
             logger.error(f"Erro ao apagar DOCX {docx_to_delete}: {e}")
-
 
         data["document_path"] = str(pdf_path.resolve())
 
