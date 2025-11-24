@@ -19,7 +19,7 @@ class PDFSplitterWorkerError(RuntimeError):
     pass
 
 class PDFSplitterWorker(KafkaWorker):
-    def __init__(self, *args, storage_base: str = "/app/tmp", output_topic: str = "document_ingestion.extracting",
+    def __init__(self, *args, storage_base: str = "/app/tmp", output_topic: str = "",
                  max_attempts_per_split: int = 3, splitter_size=10, **kwargs):
         super().__init__(
             topic="document_ingestion.pdf_processing",
@@ -79,7 +79,6 @@ class PDFSplitterWorker(KafkaWorker):
             out_dir = self.storage_base / f"{document_name.split('.')[0]}"
             out_dir.mkdir(parents=True, exist_ok=True)
 
-
             for group_idx in range(n_groups):
                 start_page = group_idx * self.splitter_size
                 end_page = min(start_page + self.splitter_size, num_pages)
@@ -108,17 +107,7 @@ class PDFSplitterWorker(KafkaWorker):
                 data["total_pages"] = num_pages
                 data["document_uuid"] = splitter_uuid
 
-                await asyncio.to_thread(self.producer.send, self.output_topic, data)
                 logger.info(f"📦 splitter enviado: {splitter_filename}")
-
-            docx_to_delete = Path(document_path)
-            try:
-                docx_to_delete.unlink()
-                logger.info(f"🗑️ Arquivo original DOCX removido: {docx_to_delete}")
-            except FileNotFoundError:
-                logger.warning(f"Arquivo DOCX já não existe: {docx_to_delete}")
-            except Exception as e:
-                logger.error(f"Erro ao apagar DOCX {docx_to_delete}: {e}")
 
             self._update_task_status(task, "Extracting")
             logger.info(f"🟢 Documento {document_id} atualizado para Extracting")    

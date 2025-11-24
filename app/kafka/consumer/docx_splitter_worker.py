@@ -43,8 +43,8 @@ class DocxToPdfSplitterWorker(KafkaWorker):
             return
 
         document_name = data.get("document_name", Path(document_path).stem)
-        repo = TaskManagerRepository(session)
-        task = repo.get_by_id(document_id)
+        self.task_manager_repo = TaskManagerRepository(session)
+        task = self.task_manager_repo.get_by_id(document_id)
 
         if not task:
             logger.error(f"❌ JobID {document_id} não encontrado")
