@@ -11,6 +11,13 @@ class Settings():
     DB_DATABASE = os.getenv("DB_DATABASE")
     KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS")
     URL_API_AUTH = os.getenv("URL_API_AUTH")
+    
+    VECTOR_DB_CREDENTIALS_PROVIDER = os.getenv("CHROMA_SERVER_AUTH_CREDENTIALS_PROVIDER")
+    VECTOR_DB_CREDENTIALS = os.getenv("CHROMA_SERVER_AUTH_CREDENTIALS")
+    VECTOR_DB_PROVIDER = os.getenv("CHROMA_SERVER_AUTH_PROVIDER")
+    VECTOR_DB_AUTH_TOKEN_TRANSPORT_HEADER = os.getenv("CHROMA_AUTH_TOKEN_TRANSPORT_HEADER")
+    DB_VECTOR_HOST = os.getenv("DB_VECTOR_HOST")
+    DB_VECTOR_PORT = os.getenv("DB_VECTOR_PORT")
 
     MIME_TYPES_PERMITIDOS = [
         'application/pdf',
@@ -33,7 +40,7 @@ class Settings():
                 "min.insync.replicas": "1"
             }
         },
-        "document_ingestion.pdf_splitter_processing": {
+        "document_ingestion.pdf_processing": {
             "num_partitions": 3,
             "replication_factor": 1,
             "config": {
@@ -42,7 +49,7 @@ class Settings():
                 "min.insync.replicas": "1"
             }
         },
-        "document_ingestion.docs_splitter_processing": {
+        "document_ingestion.docx_processing": {
             "num_partitions": 3,
             "replication_factor": 1,
             "config": {

@@ -17,7 +17,7 @@ class DocxToPdfSplitterWorkerError(RuntimeError):
 class DocxToPdfSplitterWorker(KafkaWorker):
     def __init__(self, *args,
                  storage_base: str = "/app/tmp",
-                 output_topic: str = "document_ingestion.pdf_processing",
+                 output_topic: str = "document_ingestion.docs_splitter_processing",
                  splitter_page_size: int = 10,
                  **kwargs):
         super().__init__(

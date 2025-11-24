@@ -19,7 +19,7 @@ class PDFSplitterWorkerError(RuntimeError):
     pass
 
 class PDFSplitterWorker(KafkaWorker):
-    def __init__(self, *args, storage_base: str = "/app/tmp", output_topic: str = "",
+    def __init__(self, *args, storage_base: str = "/app/tmp", output_topic: str = "document_ingestion.text_processing",
                  max_attempts_per_split: int = 3, splitter_size=10, **kwargs):
         super().__init__(
             topic="document_ingestion.pdf_processing",
