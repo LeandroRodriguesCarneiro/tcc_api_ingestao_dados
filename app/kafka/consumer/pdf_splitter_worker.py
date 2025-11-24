@@ -3,7 +3,9 @@ import uuid
 from pathlib import Path
 from typing import List
 
-from PyPDF2 import PdfReader, PdfWriter
+from docling.datamodel.pipeline_options import PdfPipelineOptions
+from docling.document_converter import DocumentConverter, PdfFormatOption
+from docling.datamodel.base_models import InputFormat
 
 from .kafka_worker import KafkaWorker
 from ...repositories import TaskManagerRepository
@@ -13,7 +15,7 @@ from ...loggin import logger
 from ..producer import KafkaProducer
 from ...file_storage import FileStorage
 
-class PDFSplitterError(RuntimeError):
+class PDFSplitterWorkerError(RuntimeError):
     pass
 
 class PDFSplitterWorker(KafkaWorker):
@@ -21,7 +23,7 @@ class PDFSplitterWorker(KafkaWorker):
                  max_attempts_per_split: int = 3, splitter_size=10, **kwargs):
         super().__init__(
             topic="document_ingestion.pdf_processing",
-            group_id="pdf_processing_group",
+            group_id="docling_processing_group",
             *args,
             **kwargs
         )
@@ -36,14 +38,26 @@ class PDFSplitterWorker(KafkaWorker):
         self.splitter_size = splitter_size
         self.file_storage = FileStorage()
 
+        pipeline_options = PdfPipelineOptions()
+        pipeline_options.do_ocr = True
+        pipeline_options.do_table_structure = True
+        pipeline_options.table_structure_options.do_cell_matching = True
+        pipeline_options.ocr_options.lang = ["pt"]
+
+        self.doc_converter = DocumentConverter(
+            format_options={
+                InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+            }
+        )
+
     async def process_message(self, data: dict, session=None):
         document_id = data.get("document_id")
-        pdf_path = data.get("document_path")
-        if not document_id or not pdf_path:
+        document_path = data.get("document_path")
+        if not document_id or not document_path:
             logger.error("❌ Mensagem inválida: faltando document_id ou document_path")
             return
 
-        document_name = data.get("document_name", Path(pdf_path).stem)
+        document_name = data.get("document_name", Path(document_path).stem)
         repo = TaskManagerRepository(session) if session is not None else self.task_manager_repo
         task = repo.get_by_id(document_id)
 
@@ -51,95 +65,71 @@ class PDFSplitterWorker(KafkaWorker):
             logger.error(f"❌ JobID {document_id} não encontrado no banco!")
             return
 
-        logger.info(f"📄 Iniciando processamento do PDF: {document_name} ({pdf_path})")
+        logger.info(f"📄 Iniciando extração com Docling: {document_name} ({document_path})")
 
         try:
-            reader = PdfReader(str(pdf_path))
-            pages = list(reader.pages)
-        except Exception as e:
-            logger.error(f"❌ Erro ao abrir PDF '{pdf_path}': {e}")
-            self._update_task_status(task, "Error")
-            return
+            result = await asyncio.to_thread(self.doc_converter.convert, document_path)
+            doc = result.document
 
-        total_pages = len(pages)
-        logger.info(f"📑 Total de páginas: {total_pages}. Splitter size: {self.splitter_size}")
+            num_pages = doc.num_pages()
+            n_groups = (num_pages + self.splitter_size - 1) // self.splitter_size
+            logger.info(f"Documento convertido com {num_pages} páginas.")
+            logger.info(f"Dividindo o documento em {n_groups} grupos de até {self.splitter_size} páginas.")
 
-        doc_uuid = uuid.uuid4().hex
-        out_dir = self.storage_base / f"{document_name.split('.')[0]}"
-        out_dir.mkdir(parents=True, exist_ok=True)
+            doc_uuid = uuid.uuid4().hex
+            out_dir = self.storage_base / f"{document_name.split('.')[0]}"
+            out_dir.mkdir(parents=True, exist_ok=True)
 
-        generated_paths: List[Path] = []
 
-        try:
-            for start in range(0, total_pages, self.splitter_size):
-                end = min(start + self.splitter_size, total_pages)
-                splitter_filename = f"{document_name}_{start+1}_{end}.pdf"
+            for group_idx in range(n_groups):
+                start_page = group_idx * self.splitter_size
+                end_page = min(start_page + self.splitter_size, num_pages)
+
+                text = ''
+                for i in range(start_page, end_page):
+                    doc_page = doc.filter(page_nrs={i})
+                    text += f"\n\n--- Pagina {i+1} ---\n\n"
+                    text += doc_page.export_to_text()
+
+                splitter_uuid = uuid.uuid4().hex
+                splitter_filename = f"{document_name}_splitter_{group_idx + 1}_pages_{start_page + 1}_to_{end_page}.md"
                 splitter_path = out_dir / splitter_filename
 
-                success = False
-                last_exc = None
-
-                for attempt in range(1, self.max_attempts_per_split + 1):
-                    try:
-                        await asyncio.to_thread(self._write_splitter_atomic, pages, start, end, splitter_path)
-                        validate_reader = PdfReader(str(splitter_path))
-                        actual_pages = len(list(validate_reader.pages))
-                        if actual_pages != (end - start):
-                            raise PDFSplitterError(f"Validação falhou: esperava {end - start}, obteve {actual_pages}")
-
-                        success = True
-                        break
-                    except Exception as exc:
-                        last_exc = exc
-                        logger.warning(f"🔁 Tentativa {attempt}/{self.max_attempts_per_split} falhou para {splitter_filename}: {exc}")
-                        if splitter_path.exists():
-                            try:
-                                splitter_path.unlink()
-                            except Exception:
-                                logger.debug("Não foi possível remover arquivo parcial.")
-
-                if not success:
-                    logger.error(f"❌ Falha permanente ao gerar splitter {splitter_filename}: {last_exc}")
-                    for p in generated_paths:
-                        try:
-                            p.unlink()
-                        except Exception:
-                            pass
+                try:
+                    await asyncio.to_thread(self.file_storage.write_text_file, text, splitter_path)
+                    logger.info(f"✅ Markdown salvo: {splitter_path}")
+                except Exception as e:
+                    logger.error(f"❌ Erro ao salvar markdown {splitter_filename}: {e}")
                     self._update_task_status(task, "Error")
-                    raise PDFSplitterError(f"Falha ao gerar splitter {splitter_filename}: {last_exc}")
-
-                generated_paths.append(splitter_path)
+                    raise PDFSplitterWorkerError(f"Erro ao salvar splitter {splitter_filename}: {e}")
 
                 data["splitter_name"] = splitter_filename
                 data["splitter_path"] = str(splitter_path.resolve())
-                data["page_range"] = [start + 1, end]
-                data["total_pages"] = total_pages
-                data["document_uuid"] = doc_uuid
+                data["page_range"] = [start_page + 1, end_page]
+                data["total_pages"] = num_pages
+                data["document_uuid"] = splitter_uuid
 
                 await asyncio.to_thread(self.producer.send, self.output_topic, data)
-                logger.info(f"📦 Splitter enviado: páginas {start+1}-{end} -> {splitter_filename}")
+                logger.info(f"📦 splitter enviado: {splitter_filename}")
+
+            docx_to_delete = Path(document_path)
+            try:
+                docx_to_delete.unlink()
+                logger.info(f"🗑️ Arquivo original DOCX removido: {docx_to_delete}")
+            except FileNotFoundError:
+                logger.warning(f"Arquivo DOCX já não existe: {docx_to_delete}")
+            except Exception as e:
+                logger.error(f"Erro ao apagar DOCX {docx_to_delete}: {e}")
 
             self._update_task_status(task, "Extracting")
-            logger.info(f"🟢 Documento {document_id} atualizado para Extracting")
-
-            return [str(p.resolve()) for p in generated_paths]
+            logger.info(f"🟢 Documento {document_id} atualizado para Extracting")    
 
         except Exception:
-            logger.exception(f"❌ Erro ao processar PDF '{document_name}'")
+            logger.exception(f"❌ Erro ao processar documento '{document_name}' com Docling")
             self._update_task_status(task, "Error")
             raise
 
-    def _write_splitter_atomic(self, pages: List, start: int, end: int, out_path: Path):
-        writer = PdfWriter()
-        for i in range(start, end):
-            writer.add_page(pages[i])
-
-        self.file_storage.write_splitter_pdf(writer, out_path)
-
     def _update_task_status(self, task: TaskManagerModel, status: str):
-        """
-        Atualiza o status da task diretamente.
-        """
         try:
             task.document_status = status
             merged_task = self.task_manager_repo.session.merge(task)

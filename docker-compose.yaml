@@ -81,10 +81,32 @@ services:
     networks:
       - test_net
 
-  pdf_parsing_worker:
+  pdf_splitter_worker:
     build: .
-    container_name: pdf_parsing_worker
+    container_name: pdf_splitter_worker
     command: ["python", "-m", "app.kafka.start_consumer", "pdf_worker"]
+    depends_on:
+      topic-init:
+        condition: service_completed_successfully
+      kafka_tcc:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres_tcc
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PSW: postgres
+      DB_DATABASE: postgres
+      KAFKA_BOOTSTRAP_SERVERS: kafka_tcc:9092
+      URL_API_AUTH: http://api_autenticacao:8000
+    volumes:
+      - ./tmp:/app/tmp
+    networks:
+      - test_net
+
+  docx_splitter_worker:
+    build: .
+    container_name: docx_splitter_worker
+    command: ["python", "-m", "app.kafka.start_consumer", "docx_worker"]
     depends_on:
       topic-init:
         condition: service_completed_successfully

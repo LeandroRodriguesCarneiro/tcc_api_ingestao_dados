@@ -1,11 +1,11 @@
 from fastapi import UploadFile
-
 import shutil
 from pathlib import Path
 import os
 import tempfile
 from PyPDF2 import PdfWriter
 from ..loggin import logger
+
 
 class FileStorage:
     def __init__(self):
@@ -25,18 +25,22 @@ class FileStorage:
         logger.info(f"Arquivo {file.filename} salvo com sucesso")
         return file_path
 
-    def write_splitter_pdf(self, writer: PdfWriter, out_path: Path):
+    def write_text_file(self, content: str, out_path: Path):
+        """
+        Grava com segurança um arquivo de texto (ex: Markdown), usando arquivo temporário e replace.
+        """
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_fd, tmp_name = tempfile.mkstemp(prefix="splitter_", suffix=".pdf", dir=str(out_path.parent))
+        tmp_fd, tmp_name = tempfile.mkstemp(prefix="tmp_text_", suffix=".md", dir=str(out_path.parent))
         os.close(tmp_fd)
         try:
-            with open(tmp_name, "wb") as f:
-                writer.write(f)
+            with open(tmp_name, "w", encoding="utf-8") as f:
+                f.write(content)
                 f.flush()
                 os.fsync(f.fileno())
             os.replace(tmp_name, str(out_path))
+            logger.info(f"Arquivo de texto salvo com sucesso: {out_path}")
         except Exception as e:
-            logger.error(f"Erro ao escrever arquivo PDF: {e}")
+            logger.error(f"Erro ao escrever arquivo de texto {out_path}: {e}")
             raise
         finally:
             if os.path.exists(tmp_name):
