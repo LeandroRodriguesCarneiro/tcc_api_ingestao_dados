@@ -1,5 +1,6 @@
 from typing import Generator
 import filetype
+import magic
 from fastapi import APIRouter, Body, HTTPException, UploadFile, File, Depends
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
@@ -8,6 +9,7 @@ from sqlalchemy.orm import Session
 from ....settings import Settings
 from ....services import IndexDocumentService, SecurityService
 from ....database import Database
+from ....loggin import logger
 
 database = Database.get_instance()
 
@@ -43,18 +45,19 @@ class IndexDocumentController:
         except Exception:
             raise HTTPException(status_code=401, detail="Token inválido ou expirado")
 
-        content = await file.read(261)
-        tipo = filetype.guess(content)
+        header = await file.read(4096)
         await file.seek(0)
+        mime = magic.from_buffer(header, mime=True)
 
-        if not tipo or tipo.mime not in Settings.MIME_TYPES_PERMITIDOS:
+        logger.info(f'{mime} {file}')
+        if mime not in Settings.MIME_TYPES_PERMITIDOS:
             raise HTTPException(
                 status_code=400,
                 detail="Tipo de arquivo não permitido ou não reconhecido."
             )
 
         service = IndexDocumentService(db)
-        result = service.save_file(file, tipo.mime)
+        result = service.save_file(file, mime)
 
         return JSONResponse(content={
             "status": "Processamento do documento iniciado",

@@ -107,6 +107,7 @@ class PDFSplitterWorker(KafkaWorker):
                 data["total_pages"] = num_pages
                 data["document_uuid"] = splitter_uuid
 
+                await asyncio.to_thread(self.producer.send, self.output_topic, data)
                 logger.info(f"📦 splitter enviado: {splitter_filename}")
 
             self._update_task_status(task, "Extracting")
