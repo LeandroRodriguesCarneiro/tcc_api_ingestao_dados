@@ -6,7 +6,6 @@ from pathlib import Path
 from .kafka_worker import KafkaWorker
 from ...repositories import TaskManagerRepository
 from ...models import TaskManagerModel
-from ...database import Database
 from ...loggin import logger
 from ..producer import KafkaProducer
 from ...file_storage import FileStorage

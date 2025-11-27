@@ -19,6 +19,13 @@ RUN apt-get update && \
 
 RUN pip install --no-cache-dir -r requirements.txt
 
+RUN python -m spacy download pt_core_news_sm
+
+RUN python - <<EOF
+from sentence_transformers import SentenceTransformer
+SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+EOF
+
 ENV LANG=pt_BR.UTF-8  
 ENV LANGUAGE=pt_BR:pt  
 ENV LC_ALL=pt_BR.UTF-8

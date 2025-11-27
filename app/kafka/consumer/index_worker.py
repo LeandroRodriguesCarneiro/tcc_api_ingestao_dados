@@ -1,25 +1,58 @@
 import asyncio
-import uuid
 from pathlib import Path
-from typing import List, Optional
+import os
+import shutil
+import re
+import magic  # <-- adicionado
 
-from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.document_converter import DocumentConverter, HTMLFormatOption
 from docling.datamodel.base_models import InputFormat
-
-from html_to_markdown import convert_to_markdown  
 
 from .kafka_worker import KafkaWorker
 from ...repositories import TaskManagerRepository
 from ...models import TaskManagerModel
-from ...database import Database
 from ...loggin import logger
-from ..producer import KafkaProducer
-from ...file_storage import FileStorage
 from ...database import VectorDataBase
+from ...chunking import chunk_by_sentences_with_overlap
+
 
 class IndexWorkerError(RuntimeError):
     pass
+
+
+def is_text_file(path: Path) -> bool:
+    """Retorna True se o arquivo for texto."""
+    mime = magic.from_file(str(path), mime=True)
+    return mime.startswith("text/")
+
+
+def robust_read_text(path: Path) -> str:
+    """Lê um arquivo tentando múltiplas codificações."""
+    encodings = [
+        "utf-8",
+        "utf-16",
+        "utf-16-le",
+        "utf-16-be",
+        "latin1"
+    ]
+
+    for enc in encodings:
+        try:
+            with open(path, "r", encoding=enc) as f:
+                return f.read()
+        except UnicodeDecodeError:
+            continue
+        except Exception:
+            continue
+
+    raise UnicodeDecodeError(
+        "decoder",
+        b"",
+        0,
+        1,
+        f"Falha ao decodificar arquivo {path} com qualquer encoding"
+    )
+
 
 class IndexWorker(KafkaWorker):
     def __init__(
@@ -47,19 +80,30 @@ class IndexWorker(KafkaWorker):
         self.task_manager_repo = TaskManagerRepository(session)
 
         document_id = data.get("document_id")
-        document_path = data.get("document_path")
+        document_path = Path(data.get("document_path")) if data.get("document_path") else None
         document_name = data.get("document_name")
-        splitter_path = data.get("splitter_path")
+        splitter_path = Path(data.get("splitter_path")) if data.get("splitter_path") else None
+        total_groups = data.get("total_groups")
+        partial_group = data.get("partial_group")
+
         page_start, page_end = data.get("page_range", (None, None))
         mime_type = data.get("mime_type")
+        task = self.task_manager_repo.get_by_id(document_id)
 
         logger.info(f"Processando documento_id={document_id}, path={document_path}, mime_type={mime_type}")
 
+        if not document_id or not document_path or not task:
+            logger.error("❌ Dados insuficientes para processar mensagem ou tarefa não encontrada")
+            return
+
         try:
+            # ------------------------------------------------------------------
+            # 1. Converter HTML para Markdown (como no seu código original)
+            # ------------------------------------------------------------------
             if mime_type == "text/html":
                 converter = DocumentConverter(
-                allowed_formats=[InputFormat.HTML],
-                format_options={InputFormat.HTML: HTMLFormatOption()}
+                    allowed_formats=[InputFormat.HTML],
+                    format_options={InputFormat.HTML: HTMLFormatOption()}
                 )
 
                 result = converter.convert(document_path)
@@ -70,24 +114,85 @@ class IndexWorker(KafkaWorker):
                 out_dir = self.storage_base / f"{document_name.split('.')[0]}"
                 out_dir.mkdir(parents=True, exist_ok=True)
 
-                path_md = out_dir / f"{document_name.split('.')[0]}.md"  
+                path_md = out_dir / f"{document_name.split('.')[0]}.md"
                 path_md.write_text(markdown, encoding="utf-8")
                 document_path = path_md
 
-            self.vector_db.test_conection()
+            # ------------------------------------------------------------------
+            # 2. Escolher arquivo a ler (splitter ou documento final)
+            # ------------------------------------------------------------------
+            path_to_read = splitter_path if splitter_path else document_path
 
-            for key, value in data.items():
-                logger.info(f"  {key} = {value}")
+            # 🔐 Anti-erros: garantir que é texto antes de tentar ler
+            if not is_text_file(path_to_read):
+                raise IndexWorkerError(
+                    f"Arquivo não é texto e não pode ser lido: {path_to_read}"
+                )
 
-            task = self.task_manager_repo.get_by_id(document_id)
+            # ------------------------------------------------------------------
+            # 3. Leitura robusta
+            # ------------------------------------------------------------------
+            text = robust_read_text(path_to_read)
+
+            # ------------------------------------------------------------------
+            # 4. Restante do seu fluxo de chunking (inalterado)
+            # ------------------------------------------------------------------
+            pattern = r"\n\n--- Pagina (\d+) ---\n\n"
+            chunks_with_metadata = []
+
+            if re.search(pattern, text):
+                splits = re.split(pattern, text)
+
+                pages_with_numbers = []
+                initial_text = splits[0].strip()
+                start_index = 1 if not initial_text else 0
+                for i in range(start_index, len(splits), 2):
+                    page_number = int(splits[i])
+                    page_text = splits[i + 1].strip()
+                    pages_with_numbers.append((page_number, page_text))
+
+                for page_number, page_text in pages_with_numbers:
+                    page_chunks = chunk_by_sentences_with_overlap(page_text, 500, 50)
+                    for chunk in page_chunks:
+                        chunk_metadata = {
+                            "text": chunk,
+                            "document_id": document_id,
+                            "document_name": document_name,
+                            "page_number": page_number,
+                            "page_range": f"{page_start}-{page_end}",
+                            "splitter_path": str(path_to_read),
+                        }
+                        chunks_with_metadata.append(chunk_metadata)
+
+            else:
+                chunks = chunk_by_sentences_with_overlap(text, 500, 50)
+                for idx, chunk in enumerate(chunks):
+                    chunk_metadata = {
+                        "text": chunk,
+                        "document_id": document_id,
+                        "document_name": document_name,
+                        "chunk_index": idx + 1,
+                    }
+                    chunks_with_metadata.append(chunk_metadata)
+
+            self.vector_db.add_document(chunks_with_metadata)
+
+            # ------------------------------------------------------------------
+            # 5. Remoção de diretórios (mantido igual ao seu)
+            # ------------------------------------------------------------------
             if task:
                 self._update_task_status(task, status="processed")
+
+            if total_groups and partial_group:
+                if partial_group == total_groups:
+                    dir_to_delete = splitter_path.parent if splitter_path else document_path.parent
+                    shutil.rmtree(dir_to_delete)
             else:
-                logger.warning(f"Task para document_id {document_id} não encontrada")
+                dir_to_delete = splitter_path.parent if splitter_path else document_path.parent
+                shutil.rmtree(dir_to_delete)
 
         except Exception as e:
             logger.exception(f"Erro processando documento {document_id}: {e}")
-            task = self.task_manager_repo.get_by_id(document_id)
             if task:
                 try:
                     self._update_task_status(task, status="error")
@@ -104,4 +209,3 @@ class IndexWorker(KafkaWorker):
         except Exception:
             logger.exception(f"Erro ao atualizar status da task para '{status}'")
             raise
-

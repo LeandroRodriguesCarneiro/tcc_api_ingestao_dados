@@ -9,11 +9,12 @@ indec_document_controller= IndexDocumentController()
 router.include_router(
     indec_document_controller.router,
     prefix='/Auth',
-    tags=['V1', 'upload']
+    tags=['V1', 'documents']
     )
 
 @router.get(
     '/health', 
+    tags=['V1'],
     status_code=status.HTTP_200_OK,
     summary="Verificar se a API está online",
     description="Verificar se a API está online e operando",

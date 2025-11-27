@@ -173,6 +173,30 @@ services:
     networks:
       - test_net
 
+  delete_index_worker:
+    build: .
+    container_name: delete_index_worker
+    command: ["python", "-m", "app.kafka.start_consumer", "delete_worker"]
+    depends_on:
+      topic-init:
+        condition: service_completed_successfully
+      kafka_tcc:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres_tcc
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PSW: postgres
+      DB_DATABASE: postgres
+      KAFKA_BOOTSTRAP_SERVERS: kafka_tcc:9092
+      URL_API_AUTH: http://api_autenticacao:8000
+      DB_VECTOR_HOST: chromadb
+      DB_VECTOR_PORT: 8000
+    env_file:
+      - .env.chroma
+    networks:
+      - test_net
+
   postgres_tcc:
     image: postgres:16
     container_name: postgres_tcc

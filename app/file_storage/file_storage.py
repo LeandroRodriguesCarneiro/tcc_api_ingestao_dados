@@ -3,7 +3,6 @@ import shutil
 from pathlib import Path
 import os
 import tempfile
-from PyPDF2 import PdfWriter
 from ..loggin import logger
 
 
@@ -13,16 +12,17 @@ class FileStorage:
         self.temp_dir.mkdir(exist_ok=True)
 
     def save_file(self, file: UploadFile) -> Path:
-        logger.info(f"Salvando arquivo {file.filename}")
-        file_dir = self.temp_dir / f"{file.filename.split('.')[0]}"
+        file_name = file.filename.upper()
+        logger.info(f"Salvando arquivo {file_name}")
+        file_dir = self.temp_dir / f"{file_name.split('.')[0]}"
         file_dir.mkdir(parents=True, exist_ok=True)
 
-        file_path = file_dir / file.filename
+        file_path = file_dir / file_name
 
         with open(file_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
 
-        logger.info(f"Arquivo {file.filename} salvo com sucesso")
+        logger.info(f"Arquivo {file_name} salvo com sucesso")
         return file_path
 
     def write_text_file(self, content: str, out_path: Path):

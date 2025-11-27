@@ -40,6 +40,15 @@ class Settings():
                 "min.insync.replicas": "1"
             }
         },
+        "document_ingestion.deleted": {
+            "num_partitions": 3,
+            "replication_factor": 1,
+            "config": {
+                "retention.ms": "604800000",
+                "cleanup.policy": "delete",
+                "min.insync.replicas": "1"
+            }
+        },
         "document_ingestion.pdf_processing": {
             "num_partitions": 3,
             "replication_factor": 1,
@@ -50,15 +59,6 @@ class Settings():
             }
         },
         "document_ingestion.docx_processing": {
-            "num_partitions": 3,
-            "replication_factor": 1,
-            "config": {
-                "retention.ms": "604800000",
-                "cleanup.policy": "delete",
-                "min.insync.replicas": "1"
-            }
-        },
-        "document_ingestion.extracting": {
             "num_partitions": 3,
             "replication_factor": 1,
             "config": {

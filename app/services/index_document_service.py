@@ -28,7 +28,7 @@ class IndexDocumentService:
         file_path = file_storage.save_file(file)
 
         task_manager_dto = TaskManagerDTO(
-            document_name=file.filename,
+            document_name=file.filename.upper(),
             document_path=str(file_path),
             document_status='Started'
         )
@@ -37,7 +37,7 @@ class IndexDocumentService:
 
         message = {
             "document_id": str(model_instance.id),
-            "document_name": file.filename,
+            "document_name": file.filename.upper(),
             "document_path": str(file_path),
             "mime_type": mime_type
         }
@@ -58,3 +58,45 @@ class IndexDocumentService:
         }
 
         return message
+    
+    def delete_file(self, document_id: str):
+        model_instance = self.task_manager.get_by_id(document_id)
+        if not model_instance:
+            raise ValueError("Documento não encontrado.")
+
+        message = {
+            "document_id": str(document_id),
+            "document_name": model_instance.document_name,
+            "document_path": model_instance.document_path,
+            "operation_type": "delete"
+        }
+
+        self.producer.send("document_ingestion.deleted", message)
+
+        return {"status": "deleted", "document_id": document_id}
+
+    def update_file(self, document_id: str, file: UploadFile, mime_type):
+        model_instance = self.task_manager.get_by_id(document_id)
+        if not model_instance:
+            raise ValueError("Documento não encontrado.")
+
+        file_storage = FileStorage()
+        new_file_path = file_storage.save_file(file)
+
+        model_instance.document_name = file.filename.upper()
+        model_instance.document_path = str(new_file_path)
+        model_instance.document_status = "Updating"
+
+        updated_model = self.task_manager.update(model_instance)
+
+        delete_message = {
+            "document_id": str(updated_model.id),
+            "document_name": updated_model.document_name,
+            "document_path": updated_model.document_path,
+            "mime_type": mime_type,
+            "operation_type": "update"
+        }
+
+        self.producer.send("document_ingestion.deleted", delete_message)
+
+        return delete_message

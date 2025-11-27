@@ -10,7 +10,6 @@ from docling.datamodel.base_models import InputFormat
 from .kafka_worker import KafkaWorker
 from ...repositories import TaskManagerRepository
 from ...models import TaskManagerModel
-from ...database import Database
 from ...loggin import logger
 from ..producer import KafkaProducer
 from ...file_storage import FileStorage
@@ -20,7 +19,7 @@ class PDFSplitterWorkerError(RuntimeError):
 
 class PDFSplitterWorker(KafkaWorker):
     def __init__(self, *args, storage_base: str = "/app/tmp", output_topic: str = "document_ingestion.text_processing",
-                 max_attempts_per_split: int = 3, splitter_size=10, **kwargs):
+                max_attempts_per_split: int = 3, splitter_size=10, **kwargs):
         super().__init__(
             topic="document_ingestion.pdf_processing",
             group_id="docling_processing_group",
@@ -86,7 +85,7 @@ class PDFSplitterWorker(KafkaWorker):
                 text = ''
                 for i in range(start_page, end_page):
                     doc_page = doc.filter(page_nrs={i})
-                    text += f"\n\n--- Pagina {i+1} ---\n\n"
+                    text += f"\n\n--- Pagina {i} ---\n\n"
                     text += doc_page.export_to_text()
 
                 splitter_uuid = uuid.uuid4().hex
@@ -106,6 +105,9 @@ class PDFSplitterWorker(KafkaWorker):
                 data["page_range"] = [start_page + 1, end_page]
                 data["total_pages"] = num_pages
                 data["document_uuid"] = splitter_uuid
+                data["total_groups"] = n_groups
+                data["partial_group"] = group_idx+1
+                data["document_uuid"] = doc_uuid
 
                 await asyncio.to_thread(self.producer.send, self.output_topic, data)
                 logger.info(f"📦 splitter enviado: {splitter_filename}")

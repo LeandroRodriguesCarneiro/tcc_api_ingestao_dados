@@ -7,9 +7,12 @@ from app.loggin import logger, attach_db_handler
 
 tags_metadata = [
     {
-        "name": "upload",
-        "description": "Operação de inserir os documentos para o banco vetorial",
-    },
+        "name": "documents",
+        "description": "Operações de adição, atualização e deleção de documentos para o banco vetorial",
+    },{
+        "name": "V1",
+        "description": "Versão 1",
+    }
 ]
 
 attach_db_handler(Database.get_instance().get_session)
