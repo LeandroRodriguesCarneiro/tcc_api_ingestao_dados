@@ -38,7 +38,7 @@ services:
       - test_net
 
   api_ingestao_dados:
-    build: .
+    build: leandrorodriguescarneiro/tcc_api_ingestao_dados:latest
     container_name: api_ingestao_dados
     ports:
       - "8002:8000"
@@ -63,7 +63,7 @@ services:
       - test_net
 
   topic-init:
-    build: .
+    build: leandrorodriguescarneiro/tcc_api_ingestao_dados:latest
     container_name: topic-init
     command: ["python", "-m", "app.kafka.init_topics"]
     depends_on:
@@ -82,7 +82,7 @@ services:
       - test_net
 
   pdf_splitter_worker:
-    build: .
+    build: leandrorodriguescarneiro/tcc_api_ingestao_dados:latest
     container_name: pdf_splitter_worker
     command: ["python", "-m", "app.kafka.start_consumer", "pdf_worker"]
     depends_on:
@@ -104,7 +104,7 @@ services:
       - test_net
 
   docx_splitter_worker:
-    build: .
+    build: leandrorodriguescarneiro/tcc_api_ingestao_dados:latest
     container_name: docx_splitter_worker
     command: ["python", "-m", "app.kafka.start_consumer", "docx_worker"]
     depends_on:
@@ -126,7 +126,7 @@ services:
       - test_net
 
   document_spliter_worker:
-    build: .
+    build: leandrorodriguescarneiro/tcc_api_ingestao_dados:latest
     container_name: document_spliter_worker
     command: ["python", "-m", "app.kafka.start_consumer", "document_spliter"]
     depends_on:
@@ -148,7 +148,7 @@ services:
       - test_net
 
   index_worker:
-    build: .
+    build: leandrorodriguescarneiro/tcc_api_ingestao_dados:latest
     container_name: index_worker
     command: ["python", "-m", "app.kafka.start_consumer", "index_worker"]
     depends_on:
@@ -174,7 +174,7 @@ services:
       - test_net
 
   delete_index_worker:
-    build: .
+    build: leandrorodriguescarneiro/tcc_api_ingestao_dados:latest
     container_name: delete_index_worker
     command: ["python", "-m", "app.kafka.start_consumer", "delete_worker"]
     depends_on:
