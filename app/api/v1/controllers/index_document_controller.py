@@ -94,7 +94,7 @@ class IndexDocumentController:
     async def consult_document(
         self,
         access_token: str = Depends(oauth2_scheme),
-        document_id: str = Form(...),
+        document_id: str = Query(...),
         db: Session = Depends(Database.get_db)
     ):
         self.validate_token(access_token)
@@ -126,7 +126,7 @@ class IndexDocumentController:
 
     async def delete_document(
         self,
-        document_id: str = Form(...),
+        document_id: str = Query(...),
         access_token: str = Depends(oauth2_scheme),
         db: Session = Depends(Database.get_db)
     ):
