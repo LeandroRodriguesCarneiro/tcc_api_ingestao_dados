@@ -59,7 +59,7 @@ class DeleteIndexWorker(KafkaWorker):
 
             if operation_type == "delete":
                 logger.info(f"📝 Documento {document_name} removido com sucesso (DELETE).")
-                self._update_task_status(task, status="processed")
+                self._update_task_status(task, status="deleted")
                 return
 
             if operation_type == "update":

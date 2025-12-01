@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, func
+
 from ..models import TaskManagerModel
 from .repository import Repository
 
@@ -39,3 +40,32 @@ class TaskManagerRepository(Repository):
         self.session.commit()
         self.session.refresh(instance)
         return instance
+    
+    def get_all_with_filter_paginated(
+        self, 
+        exclude_status: str | None = None, 
+        limit: int | None = None, 
+        offset: int | None = None
+    ) -> list[TaskManagerModel]:
+        query = select(TaskManagerModel)
+        
+        if exclude_status:
+            query = query.where(TaskManagerModel.document_status != exclude_status)
+        
+        if limit is not None:
+            query = query.limit(limit)
+            
+        if offset is not None:
+            query = query.offset(offset)
+            
+        result = self.session.execute(query)
+        return result.scalars().all()
+
+    def count_documents(self, exclude_status: str | None = None) -> int:
+        query = select(func.count()).select_from(TaskManagerModel)
+        
+        if exclude_status:
+            query = query.where(TaskManagerModel.document_status != exclude_status)
+            
+        result = self.session.execute(query)
+        return result.scalar_one()

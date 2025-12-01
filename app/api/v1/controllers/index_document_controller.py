@@ -1,14 +1,17 @@
 from typing import Generator
 import magic
-from fastapi import APIRouter, Form, HTTPException, UploadFile, File, Depends
+from fastapi import APIRouter, Form, HTTPException, UploadFile, File, Depends, Query
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from ....settings import Settings
 from ....services import IndexDocumentService, SecurityService
 from ....database import Database
 from ....loggin import logger
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 database = Database.get_instance()
 
@@ -25,7 +28,13 @@ class IndexDocumentController:
         self.router.add_api_route(
             "/consult_document",
             self.consult_document,
-            methods=["POST"],
+            methods=["GET"],
+        )
+
+        self.router.add_api_route(
+            '/list_documents',
+            self.list_documents,
+            methods=['GET']
         )
 
         self.router.add_api_route(
@@ -66,7 +75,7 @@ class IndexDocumentController:
     async def ingest_document(
         self,
         file: UploadFile = File(...),
-        access_token: str = Form(...),
+        access_token: str = Depends(oauth2_scheme),
         db: Session = Depends(Database.get_db)
     ):
         self.validate_token(access_token)
@@ -84,7 +93,7 @@ class IndexDocumentController:
 
     async def consult_document(
         self,
-        access_token: str = Form(...),
+        access_token: str = Depends(oauth2_scheme),
         document_id: str = Form(...),
         db: Session = Depends(Database.get_db)
     ):
@@ -99,7 +108,7 @@ class IndexDocumentController:
         self,
         document_id: str = Form(...),
         file: UploadFile = File(...),
-        access_token: str = Form(...),
+        access_token: str = Depends(oauth2_scheme),
         db: Session = Depends(Database.get_db)
     ):
         self.validate_token(access_token)
@@ -118,7 +127,7 @@ class IndexDocumentController:
     async def delete_document(
         self,
         document_id: str = Form(...),
-        access_token: str = Form(...),
+        access_token: str = Depends(oauth2_scheme),
         db: Session = Depends(Database.get_db)
     ):
         self.validate_token(access_token)
@@ -130,3 +139,18 @@ class IndexDocumentController:
             "status": "Documento deletado com sucesso",
             "document_id": document_id
         })
+
+    async def list_documents(
+        self,
+        access_token: str = Depends(oauth2_scheme),
+        db: Session = Depends(Database.get_db),
+        page: int = Query(1, ge=1, description="Número da página (começando em 1)"),
+        size: int = Query(10, ge=1, le=100, description="Tamanho da página")
+    ):
+        self.validate_token(access_token)
+
+        service = IndexDocumentService(db)
+        
+        response_data = service.get_documents(page=page, size=size)
+
+        return JSONResponse(content=response_data)

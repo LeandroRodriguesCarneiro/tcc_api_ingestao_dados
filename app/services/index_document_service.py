@@ -59,6 +59,45 @@ class IndexDocumentService:
 
         return message
     
+    def get_documents(self, page: int = 1, size: int = 10):
+        
+        if page < 1:
+            page = 1
+        
+        offset = (page - 1) * size
+
+        total_documents = self.task_manager.count_documents(exclude_status="deleted")
+        
+        models_list = self.task_manager.get_all_with_filter_paginated(
+            exclude_status="deleted",
+            limit=size,
+            offset=offset
+        )
+        
+        documents_list = []
+        for model_instance in models_list:
+            task_dto = TaskManagerDTO.model_validate(model_instance, from_attributes=True)
+            message = {
+                "document_id": str(model_instance.id),
+                "document_name": task_dto.document_name,
+                "document_status": task_dto.document_status, 
+                "created_at": task_dto.created_at.isoformat(), 
+                "updated_at": task_dto.updated_at.isoformat() if task_dto.updated_at else None
+            }
+            documents_list.append(message)
+
+        metadata = {
+            "total_items": total_documents,
+            "total_pages": (total_documents + size - 1) // size, 
+            "current_page": page,
+            "page_size": size
+        }
+        
+        return {
+            "items": documents_list,
+            "metadata": metadata
+        }
+    
     def delete_file(self, document_id: str):
         model_instance = self.task_manager.get_by_id(document_id)
         if not model_instance:

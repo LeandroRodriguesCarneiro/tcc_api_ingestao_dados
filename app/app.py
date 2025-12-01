@@ -7,7 +7,7 @@ from app.loggin import logger, attach_db_handler
 
 tags_metadata = [
     {
-        "name": "documents",
+        "name": "Documents",
         "description": "Operações de adição, atualização e deleção de documentos para o banco vetorial",
     },{
         "name": "V1",

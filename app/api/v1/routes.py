@@ -8,8 +8,8 @@ indec_document_controller= IndexDocumentController()
 
 router.include_router(
     indec_document_controller.router,
-    prefix='/Auth',
-    tags=['V1', 'documents']
+    prefix='/Documents',
+    tags=['V1', 'Documents']
     )
 
 @router.get(
