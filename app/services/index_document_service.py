@@ -52,7 +52,7 @@ class IndexDocumentService:
         message = {
             "document_id": str(model_instance.id),
             "document_name": task_dto.document_name,
-            "document_satus": task_dto.document_status,
+            "document_status": task_dto.document_status,
             "created_at": task_dto.created_at,
             "updated_at": task_dto.updated_at
         }
