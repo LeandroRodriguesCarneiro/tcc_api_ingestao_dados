@@ -25,12 +25,11 @@ class KafkaWorker(ABC):
         pass
 
     async def handle_message(self, msg, session):
-        """Processa mensagem com retry. Retorna (job_id, sucesso)."""
-
+        """Processa com retry + idempotência"""
         try:
             data = json.loads(msg.value().decode("utf-8"))
         except json.JSONDecodeError:
-            logger.error("❌ Mensagem inválida recebida no Kafka")
+            logger.error("❌ Mensagem inválida")
             return None, False
 
         job_id = data.get("document_id")
@@ -38,11 +37,24 @@ class KafkaWorker(ABC):
         for attempt in range(1, MAX_RETRIES + 1):
             try:
                 await self.process_message(data, session)
-                return job_id, True
+                return job_id, True 
 
             except Exception as e:
-                logger.error(f"❌ Erro ao processar (tentativa {attempt}): {e}")
-                await asyncio.sleep(RETRY_DELAY * attempt + random.random())
+                error_msg = str(e).lower()
+                
+                if any(skip_word in error_msg for skip_word in [
+                    "arquivo não encontrado", "file not found", "não existe", "já processado",
+                    "ausente/processado"
+                ]):
+                    logger.info(f"⚠️ Idempotente: {job_id} - {e}")
+                    return job_id, True
+                
+                logger.error(f"❌ Tentativa {attempt}/{MAX_RETRIES}: {e}")
+                if attempt < MAX_RETRIES:
+                    await asyncio.sleep(RETRY_DELAY * attempt + random.random())
+                else:
+                    logger.error(f"💥 {job_id} falhou definitivamente (sem DLQ)")
+                    raise
 
         return job_id, False
 

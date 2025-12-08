@@ -3,7 +3,7 @@ from pathlib import Path
 import os
 import shutil
 import re
-import magic  # <-- adicionado
+import magic
 
 from docling.document_converter import DocumentConverter, HTMLFormatOption
 from docling.datamodel.base_models import InputFormat
@@ -21,9 +21,17 @@ class IndexWorkerError(RuntimeError):
 
 
 def is_text_file(path: Path) -> bool:
-    """Retorna True se o arquivo for texto."""
-    mime = magic.from_file(str(path), mime=True)
-    return mime.startswith("text/")
+    """🔐 PROTEGIDO CONTRA FileNotFoundError"""
+    if not path.exists():
+        logger.warning(f"📁 Arquivo já processado: {path}")
+        return False
+    
+    try:
+        mime = magic.from_file(str(path), mime=True)
+        return mime.startswith("text/")
+    except Exception as e:
+        logger.warning(f"⚠️ MIME erro {path}: {e}")
+        return False
 
 
 def robust_read_text(path: Path) -> str:
@@ -96,10 +104,11 @@ class IndexWorker(KafkaWorker):
             logger.error("❌ Dados insuficientes para processar mensagem ou tarefa não encontrada")
             return
 
+        if task and task.document_status == "processed":
+            logger.info(f"✅ SKIP: {document_id} já COMPLETO")
+            return
+
         try:
-            # ------------------------------------------------------------------
-            # 1. Converter HTML para Markdown (como no seu código original)
-            # ------------------------------------------------------------------
             if mime_type == "text/html":
                 converter = DocumentConverter(
                     allowed_formats=[InputFormat.HTML],
@@ -118,25 +127,17 @@ class IndexWorker(KafkaWorker):
                 path_md.write_text(markdown, encoding="utf-8")
                 document_path = path_md
 
-            # ------------------------------------------------------------------
-            # 2. Escolher arquivo a ler (splitter ou documento final)
-            # ------------------------------------------------------------------
             path_to_read = splitter_path if splitter_path else document_path
 
-            # 🔐 Anti-erros: garantir que é texto antes de tentar ler
             if not is_text_file(path_to_read):
-                raise IndexWorkerError(
-                    f"Arquivo não é texto e não pode ser lido: {path_to_read}"
-                )
+                logger.info(f"⏭️ Arquivo ausente/processado: {path_to_read}")
+                if task and total_groups and partial_group:
+                    task.document_status = f"partial_{partial_group}/{total_groups}"
+                    self._update_task_status(task, task.document_status)
+                return
 
-            # ------------------------------------------------------------------
-            # 3. Leitura robusta
-            # ------------------------------------------------------------------
             text = robust_read_text(path_to_read)
 
-            # ------------------------------------------------------------------
-            # 4. Restante do seu fluxo de chunking (inalterado)
-            # ------------------------------------------------------------------
             pattern = r"\n\n--- Pagina (\d+) ---\n\n"
             chunks_with_metadata = []
 
@@ -177,28 +178,33 @@ class IndexWorker(KafkaWorker):
 
             self.vector_db.add_document(chunks_with_metadata)
 
-            # ------------------------------------------------------------------
-            # 5. Remoção de diretórios (mantido igual ao seu)
-            # ------------------------------------------------------------------
+            new_status = "processed" if not total_groups else f"partial_{partial_group}/{total_groups}"
             if task:
-                self._update_task_status(task, status="processed")
+                task.document_status = new_status
+                self._update_task_status(task, new_status)
 
+            should_delete = False
             if total_groups and partial_group:
-                if partial_group == total_groups:
-                    dir_to_delete = splitter_path.parent if splitter_path else document_path.parent
-                    shutil.rmtree(dir_to_delete)
+                should_delete = partial_group == total_groups
             else:
-                dir_to_delete = splitter_path.parent if splitter_path else document_path.parent
-                shutil.rmtree(dir_to_delete)
+                should_delete = True
 
+            if should_delete:
+                dir_to_delete = splitter_path.parent if splitter_path else document_path.parent
+                if dir_to_delete.exists():
+                    shutil.rmtree(dir_to_delete, ignore_errors=True)
+                    logger.info(f"🗑️ [{partial_group}/{total_groups or 1}] Limpeza: {dir_to_delete}")
+
+            logger.info(f"✅ [{partial_group}/{total_groups or 1}] {document_id} COMPLETO")
+
+        except IndexWorkerError:
+            raise
         except Exception as e:
-            logger.exception(f"Erro processando documento {document_id}: {e}")
+            logger.exception(f"Erro {document_id}: {e}")
             if task:
-                try:
-                    self._update_task_status(task, status="error")
-                except Exception:
-                    logger.error("Falha ao marcar task como erro")
-            raise IndexWorkerError(f"Falha no processamento do documento {document_id}") from e
+                task.document_status = "error"
+                self._update_task_status(task, "error")
+            raise IndexWorkerError(str(e)) from e
 
     def _update_task_status(self, task: TaskManagerModel, status: str):
         try:
